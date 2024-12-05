@@ -4,15 +4,12 @@ Sample from a trained model
 
 from contextlib import nullcontext
 
-import tiktoken
 import torch
 
 from model import GPT
 
 # -----------------------------------------------------------------------------
-init_from = "gpt2"  # either 'resume' (from an out_dir) or a gpt2 variant (e.g. 'gpt2-xl')
-out_dir = "out"  # ignored if init_from is not 'resume'
-start = ["I", "Mr", "well"]
+prompts = ["Who are you", "Mr Potter", "Well done"]
 batch_size = 3
 max_new_tokens = 50  # number of tokens generated in each sample
 temperature = 0.8  # 1.0 = no change, < 1.0 = less random, > 1.0 = more random, in predictions
@@ -39,22 +36,27 @@ ctx = (
 )
 
 
-model: GPT = GPT.from_pretrained(init_from, dict(dropout=0.0))
+# disable dropout when inference
+model: GPT = GPT.from_pretrained("gpt2", dict(dropout=0.0))
 
 model.eval()
 model.to(device)
 model = torch.compile(model)
 
-encoder = tiktoken.get_encoding("gpt2")
+# tiktoken tokenizer
+# import tiktoken
+# tokenizer = tiktoken.get_encoding("gpt2")
+# start_ids = [tokenizer.encode(x, allowed_special={"<|endoftext|>"}) for x in prompts]
+# x = torch.tensor(start_ids, dtype=torch.long, device=device)
 
-# encode the beginning of the prompt
-start_ids = [encoder.encode(x, allowed_special={"<|endoftext|>"}) for x in start]
-x = torch.tensor(start_ids, dtype=torch.long, device=device)
+# hf transformer tokenizer
+from transformers import GPT2Tokenizer
 
-# run generation
-with torch.no_grad():
-    with ctx:
-        y = model.generate(x, max_new_tokens, temperature=temperature, top_k=top_k)
-        for i in range(batch_size):
-            print(f"--------------> sample {i}")
-            print(encoder.decode(y[i].tolist()))
+tokenizer: GPT2Tokenizer = GPT2Tokenizer.from_pretrained("gpt2")
+tokenizer.pad_token = tokenizer.eos_token
+x = tokenizer(prompts, padding=True, return_tensors="pt").input_ids
+
+y = model.generate(x, max_new_tokens, temperature=temperature, top_k=top_k)
+for i in range(batch_size):
+    print(f"\n--------------> batch {i}\n")
+    print(tokenizer.decode(y[i].tolist()))

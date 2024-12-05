@@ -14,6 +14,7 @@ from dataclasses import dataclass
 import torch
 import torch.nn as nn
 from torch.nn import functional as F
+from tqdm import tqdm
 
 
 class LayerNorm(nn.Module):
@@ -251,7 +252,6 @@ class GPT(nn.Module):
             "gpt2-large": dict(n_layer=36, n_head=20, n_embd=1280),  # 774M params
             "gpt2-xl": dict(n_layer=48, n_head=25, n_embd=1600),  # 1558M params
         }[model_type]
-        print("forcing vocab_size=50257, block_size=1024, bias=True")
         config_args["vocab_size"] = 50257  # always 50257 for GPT model checkpoints
         config_args["block_size"] = 1024  # always 1024 for GPT model checkpoints
         config_args["bias"] = True  # always True for GPT model checkpoints
@@ -260,6 +260,7 @@ class GPT(nn.Module):
             print(f"overriding dropout rate to {override_args['dropout']}")
             config_args["dropout"] = override_args["dropout"]
         # create a from-scratch initialized minGPT model
+        print(f"GPTConfig args: {config_args}")
         config = GPTConfig(**config_args)
         model = GPT(config)
         sd = model.state_dict()
@@ -358,12 +359,11 @@ class GPT(nn.Module):
         the sequence max_new_tokens times, feeding the predictions back into the model each time.
         Most likely you'll want to make sure to be in model.eval() mode of operation for this.
         """
-        for _ in range(max_new_tokens):
+        for _ in tqdm(range(max_new_tokens)):
             # if the sequence context is growing too long we must crop it at block_size
             idx_cond = (
                 idx if idx.size(1) <= self.config.block_size else idx[:, -self.config.block_size :]
             )
-            print(f"idx_cond shape: {idx_cond.shape}")
             # forward the model to get the logits for the index in the sequence
             logits, _ = self(idx_cond)
             # pluck the logits at the final step and scale by desired temperature
